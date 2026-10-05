@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+models/
+output/
+.venv*
+.ipynb_checkpoints/
+.mimosa/
