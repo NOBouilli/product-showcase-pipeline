@@ -1,6 +1,6 @@
 # product-showcase-pipeline
 
-从产品结构拓扑图 + 文字说明书出发，用 ControlNet + CAD 投影 + 图像生成模型产出**产品展示图全套**：产品设计线稿、渲染图、标准三视图、核心结构细节及放大图。
+从产品结构拓扑图 + 文字说明书出发，用 ControlNet + CAD 投影 + 图像生成模型产出**产品展示图全套**：产品设计线稿、渲染图、标准三视图、核心结构细节及放大图。可选再喂一张**整体结构等距示意图**（解剖图、发丝线导出、等距总览），用双 ControlNet 把整机布局锁进整体实物渲染和核心结构实物渲染。
 
 两个 [ZCode](https://github.com/ZCode-hub) skills（也可独立当脚本库用）：
 
@@ -15,15 +15,21 @@
 说明书(文字) ─┐
               ├─[结构解析·LLM]→ 结构 JSON（部件清单/视图规划/裁剪框）
 拓扑图(剖视)─┤
-              └─[topo2sketch]→ 设计线稿 ──┐
-                                          ├─[sketch2showcase 渲染]→ 展示图
-CAD 简模 ─[cad_views 投影]→ 三视图线稿 ──┤
-   │                                      └─▶ 三视图渲染
-   └─[裁局部]──[x4 放大]──▶ 核心结构细节及放大图
+              └─[topo2sketch]→ 设计线稿 ──────────────┐
+CAD 简模 ─[cad_views 投影]→ 三视图线稿 ───────────────┤
+整体结构等距示意图（可选）─[白底黑线]────────────────┤
+                                                      ▼
+                               generate_showcase.py
+                                 ortho    三视图渲染（仅线稿，默认）
+                                 overall  整体实物渲染（线稿 + 等距图）
+                                 core     核心结构实物渲染（等距图可裁 + 线稿）
+                                                      │
+展示图 ─[裁局部]──[x4 放大]──────────────────────▶ 核心结构细节及放大图
 ```
 
 **铁律：AI 只负责"怎么好看"，不负责"长什么样"。** 三视图与结构图的线稿控制图必须
-来自几何投影或既有线稿，禁止 txt2img 直出。
+来自几何投影或既有线稿，禁止 txt2img 直出。等距示意图是控制图，不是风格提示：先转成
+白底黑线，再和线稿一起进 ControlNet。
 
 ## 安装
 
@@ -48,14 +54,29 @@ python skills/sketch2showcase/scripts/download_models.py --root models
 python skills/sketch2showcase/scripts/cad_views.py examples/hydrostatic_tester_model.py \
     --out-dir output/cad --views front,side,top
 
-# 3. 渲染展示图
+# 3. 渲染展示图（默认 ortho：只有主线稿，和以前一样）
 python skills/sketch2showcase/scripts/generate_showcase.py output/cad/view_front.png \
     --product "automatic hydrostatic testing machine for fire extinguisher cylinders" \
     --view "front view" --seeds 101,202
 
+# 3b. 整体实物渲染：线稿 + 整体结构等距示意图（双几何控制）
+python skills/sketch2showcase/scripts/generate_showcase.py output/cad/view_front.png \
+    --iso-ref output/iso_overview.png --mode overall \
+    --product "automatic hydrostatic testing machine for fire extinguisher cylinders" \
+    --view "isometric three-quarter view" --seeds 101
+
+# 3c. 核心结构实物渲染：等距图裁核心区 + 线稿
+python skills/sketch2showcase/scripts/generate_showcase.py output/cad/view_front.png \
+    --iso-ref output/iso_overview.png --mode core --iso-box 120,80,400,360 \
+    --product "automatic hydrostatic testing machine for fire extinguisher cylinders" \
+    --view "close-up of the core assembly" --seeds 101
+
 # 4. 细节放大图
 python skills/sketch2showcase/scripts/detail_zoom.py output/showcase/xxx.png --box 390,430,680,720
 ```
+
+`overall` 写出 `*_overall_render_<seed>.png`，`core` 写出 `*_core_render_<seed>.png`。
+不传 `--iso-ref` 时不会走第二路控制网。
 
 上游线稿生成：
 
